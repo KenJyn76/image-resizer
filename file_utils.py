@@ -18,7 +18,12 @@ def parse_size(size_str: str) -> int:
     unit = unit.upper()  # Normalize the unit to uppercase
 
     # Define multipliers for each unit
-    multipliers = {'K': 1024, 'M': 1024**2, 'G': 1024**3, 'T': 1024**4}
+    multipliers = {
+        'K': 1024,        # Kilo: 1024 bytes
+        'M': 1024**2,     # Mega: 1024^2 bytes
+        'G': 1024**3,     # Giga: 1024^3 bytes
+        'T': 1024**4      # Tera: 1024^4 bytes
+    }
     size_in_bytes = int(number * multipliers.get(unit, 1))  # Return the size in bytes
 
     if size_in_bytes <= 0:  # Ensure target size is not zero or negative
