@@ -82,24 +82,40 @@ def get_top_level_dir(seven_zip_path: str, archive_path: str) -> str:
     cmd = [seven_zip_path, "l", archive_path]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     lines = result.stdout.split('\n')
+
+    # Debugging output to see all lines returned
+    print("Lines from 7-Zip listing:")
     for line in lines:
-        if line.startswith("Path = "):
-            return line.split("Path = ")[1].strip()
+        print(line)
+
+    # Look for the first directory in the listing
+    for line in lines:
+        if line.startswith("Path = ") and "D...." in line:  # Check for directory
+            path = line.split("Path = ")[1].strip()
+            top_level_dir = os.path.dirname(path)  # Get the directory of the path
+            print(f"Identified top-level directory: {top_level_dir}")
+            return top_level_dir  # Return the directory of the path
+
     raise ValueError("Unable to determine top-level directory in the archive")
 
 def extract_ffmpeg(seven_zip_path: str, file_path: str) -> None:
     print("Extracting FFmpeg...")
-    top_level_dir = get_top_level_dir(seven_zip_path, file_path)
 
     cmd = [seven_zip_path, "x", file_path, f"-o{ASSETS_DIR}", "-y"]
     subprocess.run(cmd, check=True, capture_output=True)
     print("Extraction completed.")
 
-    extracted_path = os.path.join(ASSETS_DIR, top_level_dir)
+    # The expected extracted path is now directly the ASSETS_DIR
+    extracted_path = os.path.join(ASSETS_DIR, "ffmpeg-2024-09-16-git-76ff97cef5-full_build")  # Update this to match the actual extracted folder name
     final_path = os.path.join(ASSETS_DIR, FFMPEG_DIR)
 
     if os.path.exists(final_path):
         shutil.rmtree(final_path)
+
+    # Check if the extracted path exists before renaming
+    if not os.path.exists(extracted_path):
+        raise FileNotFoundError(f"Extracted path does not exist: {extracted_path}")
+
     os.rename(extracted_path, final_path)
     print(f"Renamed extracted directory to {FFMPEG_DIR}")
 

@@ -8,14 +8,15 @@ def main():
     parser.add_argument("input_folder", help="Folder containing images to resize")
     parser.add_argument("target_size", type=parse_size, help="Target file size (e.g., '500K', '5M', '2G')")
     parser.add_argument("--probe-only", action="store_true", help="Perform a probe without modifying files")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
 
     ffmpeg_path, ffprobe_path = ensure_ffmpeg_installed()
 
-    probe_results = probe(ffprobe_path, args.input_folder, args.target_size)
+    probe_results = probe(ffprobe_path, args.input_folder, args.target_size, args.verbose)
 
     if not args.probe_only:
-        process_images(ffmpeg_path, probe_results)
+        process_images(ffmpeg_path, probe_results, args.verbose)
 
 if __name__ == "__main__":
     main()
