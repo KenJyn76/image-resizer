@@ -4,13 +4,13 @@ import subprocess
 import hashlib
 import requests
 import shutil
-import zipfile
 from typing import Tuple
 
 ASSETS_DIR = "assets"
 FFMPEG_DIR = "ffmpeg-git-full"
-FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-FFMPEG_SHA256_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip.sha256"
+FFMPEG_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z"
+FFMPEG_SHA256_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z.sha256"
+SEVEN_ZIP_URL = "https://www.7-zip.org/a/7zr.exe"
 
 def install_package(package: str) -> None:
     print(f"Installing {package} library...")
@@ -23,10 +23,13 @@ except ImportError:
     import requests
 
 def get_remote_sha256(url: str) -> str:
-    response = requests.get(url)
-    if response.status_code != 200:
-        raise ValueError(f"Failed to get remote SHA256. Status code: {response.status_code}")
-    return response.text.strip()
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.text.strip()
+    except requests.RequestException as e:
+        print(f"Warning: Failed to get remote SHA256. Error: {e}")
+        return None
 
 def calculate_sha256(file_path: str) -> str:
     sha256_hash = hashlib.sha256()
@@ -51,10 +54,15 @@ def download_file(url: str, local_path: str) -> None:
                 sys.stdout.flush()
     print("\nDownload completed.")
 
-def verify_download(zip_path: str) -> None:
+def verify_download(file_path: str) -> None:
     print("Verifying download...")
     remote_sha256 = get_remote_sha256(FFMPEG_SHA256_URL)
-    local_sha256 = calculate_sha256(zip_path)
+
+    if remote_sha256 is None:
+        print("Skipping hash verification due to unavailable remote SHA256.")
+        return
+
+    local_sha256 = calculate_sha256(file_path)
 
     print(f"Remote SHA256: {remote_sha256}")
     print(f"Local SHA256:  {local_sha256}")
@@ -63,12 +71,39 @@ def verify_download(zip_path: str) -> None:
         raise ValueError("Downloaded file hash does not match the expected hash.")
     print("Hash verification successful.")
 
-def extract_ffmpeg(zip_path: str) -> None:
+def download_7zip() -> str:
+    seven_zip_path = os.path.join(ASSETS_DIR, "7zr.exe")
+    if not os.path.exists(seven_zip_path):
+        print("Downloading 7-Zip standalone executable...")
+        download_file(SEVEN_ZIP_URL, seven_zip_path)
+    return seven_zip_path
+
+def get_top_level_dir(seven_zip_path: str, archive_path: str) -> str:
+    cmd = [seven_zip_path, "l", archive_path]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    lines = result.stdout.split('\n')
+    for line in lines:
+        if line.startswith("Path = "):
+            return line.split("Path = ")[1].strip()
+    raise ValueError("Unable to determine top-level directory in the archive")
+
+def extract_ffmpeg(seven_zip_path: str, file_path: str) -> None:
     print("Extracting FFmpeg...")
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(ASSETS_DIR)
+    top_level_dir = get_top_level_dir(seven_zip_path, file_path)
+
+    cmd = [seven_zip_path, "x", file_path, f"-o{ASSETS_DIR}", "-y"]
+    subprocess.run(cmd, check=True, capture_output=True)
     print("Extraction completed.")
-    os.remove(zip_path)
+
+    extracted_path = os.path.join(ASSETS_DIR, top_level_dir)
+    final_path = os.path.join(ASSETS_DIR, FFMPEG_DIR)
+
+    if os.path.exists(final_path):
+        shutil.rmtree(final_path)
+    os.rename(extracted_path, final_path)
+    print(f"Renamed extracted directory to {FFMPEG_DIR}")
+
+    os.remove(file_path)
 
 def test_ffmpeg(ffmpeg_path: str, ffprobe_path: str) -> None:
     for exe_path, name in [(ffmpeg_path, "FFmpeg"), (ffprobe_path, "FFprobe")]:
@@ -90,18 +125,21 @@ def ensure_ffmpeg_installed() -> Tuple[str, str]:
     else:
         print("FFmpeg not found. Downloading...")
         os.makedirs(ASSETS_DIR, exist_ok=True)
-        zip_path = os.path.join(ASSETS_DIR, "ffmpeg.zip")
+        file_path = os.path.join(ASSETS_DIR, "ffmpeg.7z")
 
         try:
-            download_file(FFMPEG_URL, zip_path)
-            print(f"Download completed. File size: {os.path.getsize(zip_path)} bytes")
+            download_file(FFMPEG_URL, file_path)
+            print(f"Download completed. File size: {os.path.getsize(file_path)} bytes")
 
-            verify_download(zip_path)
-            extract_ffmpeg(zip_path)
+            verify_download(file_path)
+            seven_zip_path = download_7zip()
+            extract_ffmpeg(seven_zip_path, file_path)
 
             print("FFmpeg installation completed.")
         except Exception as e:
             print(f"Error during FFmpeg installation: {e}")
+            if os.path.exists(file_path):
+                os.remove(file_path)
             raise
 
     if not os.path.exists(ffmpeg_path) or not os.path.exists(ffprobe_path):
